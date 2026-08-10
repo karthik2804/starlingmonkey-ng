@@ -14,16 +14,16 @@
 
 use core_runtime::config::RuntimeConfig;
 use core_runtime::event_loop::run_microtasks;
-use core_runtime::runtime::{clear_global_initializers, register_global_initializer, Runtime};
+use core_runtime::runtime::RuntimeBuilder;
 use js::conversion::FromJSVal;
 use web_streams::readable::ReadableStream;
 
 /// Create a stream from `bytes`, expose it as `globalThis.__stream`, then evaluate
 /// `code`, drain microtasks, and return `String(globalThis.__out)`.
 fn run_with_stream(bytes: &[u8], code: &str) -> String {
-    clear_global_initializers();
-    register_global_initializer(web_streams::add_to_global);
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(web_streams::add_to_global)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
     let global = scope.global();
     let stream = ReadableStream::from_bytes(&scope, bytes).expect("create stream from bytes");

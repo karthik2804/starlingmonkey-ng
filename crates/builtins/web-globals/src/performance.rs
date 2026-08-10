@@ -113,15 +113,10 @@ pub fn add_to_global<'s>(scope: &'s Scope<'_>, global: Object<'s>) {
 
 #[cfg(test)]
 mod tests {
-    use core_runtime::{runtime, test_util::eval_with_setup};
+    use core_runtime::test_util::eval_with_setup;
 
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                runtime::register_global_initializer(super::add_to_global);
-            },
-            code,
-        )
+        eval_with_setup(&[super::add_to_global], code)
     }
 
     #[test]

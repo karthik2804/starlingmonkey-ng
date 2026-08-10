@@ -16,15 +16,15 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use core_runtime::config::RuntimeConfig;
-use core_runtime::runtime::{clear_global_initializers, Runtime};
+use core_runtime::runtime::RuntimeBuilder;
 use js::conversion::FromJSVal;
 
 /// Evaluate `code` in a runtime initialized from `config`, returning
 /// `String(globalThis.__out)`.
 fn run(config: &RuntimeConfig, code: &str) -> String {
-    clear_global_initializers();
-    libstarling::register_builtins();
-    let rt = Runtime::init(config);
+    let rt = RuntimeBuilder::default()
+        .with_initializers(libstarling::BUILTIN_INITIALIZERS)
+        .init(config);
     let scope = rt.default_global();
     if js::compile::evaluate_with_filename(&scope, code, "test.js", 1).is_err() {
         panic!(
@@ -89,9 +89,9 @@ fn explicit_flag_overrides_either_default() {
 /// embedders that decide per-invocation.
 #[test]
 fn setter_overrides_after_init() {
-    clear_global_initializers();
-    libstarling::register_builtins();
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .with_initializers(libstarling::BUILTIN_INITIALIZERS)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
     core_runtime::config::set_enforce_fetch_restrictions(true);
     assert!(core_runtime::config::enforce_fetch_restrictions());

@@ -13,14 +13,8 @@
 
 use core_runtime::test_util::eval_with_setup;
 
-fn setup() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        web_globals::add_to_global(scope, global);
-    });
-}
-
 fn eval(code: &str) -> String {
-    eval_with_setup(setup, code)
+    eval_with_setup(&[web_globals::add_to_global], code)
 }
 
 // ── Event properties not covered by enabled WPT ──
@@ -299,13 +293,14 @@ fn custom_event_init_custom_event() {
 #[test]
 fn listener_identity_survives_compacting_gc() {
     use core_runtime::config::RuntimeConfig;
-    use core_runtime::runtime::Runtime;
+    use core_runtime::runtime::RuntimeBuilder;
     use js::compile::evaluate_with_filename;
     use js::conversion::FromJSVal;
     use js::gc::{self, GCOptions, GCReason};
 
-    setup();
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(web_globals::add_to_global)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
 
     // Register one listener. State lives on `globalThis` so it survives across
@@ -432,13 +427,14 @@ fn undefined_this_on_non_global_interface_still_throws() {
 #[test]
 fn global_listener_survives_compacting_gc() {
     use core_runtime::config::RuntimeConfig;
-    use core_runtime::runtime::Runtime;
+    use core_runtime::runtime::RuntimeBuilder;
     use js::compile::evaluate_with_filename;
     use js::conversion::FromJSVal;
     use js::gc::{self, GCOptions, GCReason};
 
-    setup();
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(web_globals::add_to_global)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
 
     // The closure's only strong reference is the global's listener list.

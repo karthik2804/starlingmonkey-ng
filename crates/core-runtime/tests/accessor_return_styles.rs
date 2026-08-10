@@ -43,16 +43,14 @@ impl Cell {
     }
 }
 
-fn setup() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        Cell::add_to_global(scope, global);
-    });
+fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+    Cell::add_to_global(scope, global);
 }
 
 #[test]
 fn setter_ok_assigns() {
     assert_eq!(
-        eval_with_setup(setup, "const c = new Cell(); c.value = 5; c.value"),
+        eval_with_setup(&[setup_globals], "const c = new Cell(); c.value = 5; c.value"),
         "5"
     );
 }
@@ -60,7 +58,7 @@ fn setter_ok_assigns() {
 #[test]
 fn setter_err_throws_not_swallowed() {
     assert!(throws_with_setup(
-        setup,
+        &[setup_globals],
         "const c = new Cell(); c.value = -1;"
     ));
 }
@@ -69,7 +67,7 @@ fn setter_err_throws_not_swallowed() {
 fn setter_err_leaves_value_unchanged() {
     assert_eq!(
         eval_with_setup(
-            setup,
+            &[setup_globals],
             "const c = new Cell(); c.value = 9; try { c.value = -1; } catch (e) {} c.value"
         ),
         "9"

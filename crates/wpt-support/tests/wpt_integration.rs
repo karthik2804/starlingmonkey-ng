@@ -5,16 +5,11 @@
 // This file contains nothing platform-specific, so skip it on wasm32.
 #![cfg(not(target_arch = "wasm32"))]
 
-use core_runtime::test_util::eval_with_setup;
-
 fn eval_wpt(code: &str) -> String {
-    eval_with_setup(
-        || {
-            libstarling::register_builtins();
-            libstarling::runtime::register_global_initializer(wpt_support::add_to_global);
-        },
-        code,
-    )
+    let mut inits: Vec<libstarling::runtime::GlobalInitFn> =
+        libstarling::BUILTIN_INITIALIZERS.to_vec();
+    inits.push(wpt_support::add_to_global);
+    core_runtime::test_util::eval_with_setup(&inits, code)
 }
 
 #[test]

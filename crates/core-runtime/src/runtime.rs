@@ -2,9 +2,7 @@
 
 use std::{
     cell::{RefCell, UnsafeCell},
-    env,
     ffi::c_void,
-    process,
     ptr::NonNull,
     rc::Rc,
     sync::{Mutex, OnceLock},
@@ -32,34 +30,65 @@ use js::{
 
 /// Callback type for installing additional globals on a newly created global object.
 ///
-/// Registered initializers are called during `Runtime::new_global()`.
-type GlobalInitFn = for<'a> fn(&'a Scope<'a>, Object<'a>);
+/// Initializers are called during [`Runtime::new_global()`] for every new global
+/// created by a runtime. Use [`RuntimeBuilder`] to attach initializers to a runtime.
+pub type GlobalInitFn = for<'a> fn(&'a Scope<'a>, Object<'a>);
 
-thread_local! {
-    static GLOBAL_INITIALIZERS: RefCell<Vec<GlobalInitFn>> = const { RefCell::new(Vec::new()) };
+/// Builder for creating a [`Runtime`] with a specific set of global initializers.
+///
+/// Use [`RuntimeBuilder::global_initializer`] to register functions that will
+/// be called on every new global object created by the runtime. Registration
+/// is idempotent: adding the same function pointer twice is a no-op.
+///
+/// # Example
+///
+/// ```no_run
+/// use core_runtime::runtime::RuntimeBuilder;
+/// use core_runtime::config::RuntimeConfig;
+///
+/// fn my_init(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+///     // install globals...
+/// }
+///
+/// let rt = RuntimeBuilder::default()
+///     .global_initializer(my_init)
+///     .init(&RuntimeConfig::default());
+/// ```
+pub struct RuntimeBuilder {
+    initializers: Vec<GlobalInitFn>,
 }
 
-/// Register a function to be called whenever a new global object is created.
-///
-/// This is used by builtins crates (e.g., `web-globals`) to install their
-/// functions and constants on every global without creating a dependency
-/// from `core-runtime` to the builtins crate.
-///
-/// Must be called before `Runtime::init()` to take effect on the default
-/// global. Registration is idempotent and applies to all future runtimes and global objects.
-pub fn register_global_initializer(init: GlobalInitFn) {
-    GLOBAL_INITIALIZERS.with(|inits| {
-        let mut inits = inits.borrow_mut();
-        if !inits.contains(&init) {
-            inits.push(init);
+impl Default for RuntimeBuilder {
+    fn default() -> Self {
+        Self {
+            initializers: Vec::new(),
         }
-    });
+    }
 }
 
-/// Clear all registered global initializers (used between tests that need
-/// disjoint initializer sets).
-pub fn clear_global_initializers() {
-    GLOBAL_INITIALIZERS.with(|inits| inits.borrow_mut().clear());
+impl RuntimeBuilder {
+    /// Add a global initializer. Idempotent: duplicate function pointers are ignored.
+    pub fn global_initializer(mut self, f: GlobalInitFn) -> Self {
+        if !self.initializers.contains(&f) {
+            self.initializers.push(f);
+        }
+        self
+    }
+
+    /// Add multiple global initializers at once. Duplicates are ignored.
+    pub fn with_initializers(mut self, initializers: &[GlobalInitFn]) -> Self {
+        for &f in initializers {
+            if !self.initializers.contains(&f) {
+                self.initializers.push(f);
+            }
+        }
+        self
+    }
+
+    /// Initialize a new runtime with the registered initializers.
+    pub fn init(self, config: &RuntimeConfig) -> Rc<Runtime> {
+        Runtime::init_with(config, self.initializers)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -171,6 +200,9 @@ pub struct Runtime {
     /// instances. The GC trace callback iterates this to trace all event
     /// loops across concurrent invocations.
     invocations: RefCell<InvocationRegistry>,
+    /// Global initializers passed in at construction time via [`RuntimeBuilder`].
+    /// Called on every new global created by this runtime.
+    global_initializers: Vec<GlobalInitFn>,
 }
 
 impl std::fmt::Debug for Runtime {
@@ -180,22 +212,6 @@ impl std::fmt::Debug for Runtime {
 }
 
 impl Runtime {
-    pub fn init_from_env() -> Rc<Self> {
-        let config = RuntimeConfig::from_env().unwrap_or_else(|e| {
-            eprintln!("Error loading runtime config: {}", e);
-            process::exit(1);
-        });
-        Self::init(&config)
-    }
-
-    pub fn init_from_args() -> Rc<Self> {
-        let config = RuntimeConfig::from_args(env::args()).unwrap_or_else(|e| {
-            eprintln!("Error loading runtime config: {}", e);
-            process::exit(1);
-        });
-        Self::init(&config)
-    }
-
     /// Get a mutable reference to the inner MozJS runtime.
     ///
     /// # Safety
@@ -208,12 +224,19 @@ impl Runtime {
         unsafe { &mut *self.mozjs_rt.get() }
     }
 
-    /// Initialize a new runtime and return a reference-counted handle to it.
+    /// Initialize a new runtime with no global initializers.
     ///
-    /// The runtime owns the SpiderMonkey context and all global objects created
-    /// in that context. The caller is responsible for keeping the `Rc<Runtime>`
-    /// alive for as long as the runtime is needed.
+    /// This is a convenience for callers that don't need any custom globals.
+    /// For attaching initializers, use [`RuntimeBuilder`] instead.
     pub fn init(config: &RuntimeConfig) -> Rc<Self> {
+        RuntimeBuilder::default().init(config)
+    }
+
+    /// Initialize a new runtime with the given set of global initializers.
+    ///
+    /// Called by [`RuntimeBuilder::init`]. The `initializers` list is
+    /// stored on the runtime and called for every new global object.
+    fn init_with(config: &RuntimeConfig, initializers: Vec<GlobalInitFn>) -> Rc<Self> {
         crate::config::set_enforce_fetch_restrictions(config.enforce_fetch_restrictions());
         let mut mozjs_rt =
             unsafe { MozJSRuntime::create_with_internal_job_queues(engine_handle(), None) };
@@ -223,6 +246,7 @@ impl Runtime {
             mozjs_rt: UnsafeCell::new(mozjs_rt),
             default_global: Heap::default(),
             invocations: RefCell::new(InvocationRegistry::new()),
+            global_initializers: initializers,
         });
 
         // Register runtime GC tracer, passing a raw pointer to the Rc's
@@ -283,13 +307,7 @@ impl Runtime {
             event_loop::timer::install_timer_globals(&scope, scope.global());
         }
 
-        // Call any registered global initializers (e.g., web-globals, WPT builtins).
-        // Snapshot the list first: an initializer (or JS it runs) may itself
-        // register further initializers, and calling out under the borrow
-        // would panic. Initializers registered mid-call apply to subsequent
-        // globals only.
-        let inits = GLOBAL_INITIALIZERS.with(|inits| inits.borrow().clone());
-        for init in inits {
+        for init in &self.global_initializers {
             init(&scope, scope.global());
         }
 

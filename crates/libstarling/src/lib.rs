@@ -5,19 +5,40 @@ use core_runtime::event_loop::run_to_completion;
 // Re-export everything from core-runtime.
 pub use core_runtime::*;
 
-/// Register all built-in global initializers.
-///
-/// This must be called before `Runtime::init()` to ensure built-in web
-/// globals (like `btoa`, `atob`) are installed on every global object.
-pub fn register_builtins() {
-    runtime::register_global_initializer(web_globals::add_to_global);
-    runtime::register_global_initializer(web_streams::add_to_global);
-    runtime::register_global_initializer(web_url::add_to_global);
-    runtime::register_global_initializer(web_fetch::add_to_global);
-    runtime::register_global_initializer(|scope, global| unsafe {
-        cpp_builtins::install(scope.cx_mut().raw_cx(), global.handle());
-    });
+/// Named wrappers for the built-in `add_to_global` functions. Rust's HRTB
+/// coercion rules require that all elements of a `&[GlobalInitFn]` slice have
+/// the exact same `for<'a> fn(&'a Scope<'a>, Object<'a>)` type. Some of the
+/// generated fn items carry three independent lifetimes, so we provide explicit
+/// wrappers that unify them.
+fn init_web_streams<'a>(scope: &'a js::gc::scope::Scope<'a>, global: js::Object<'a>) {
+    web_streams::add_to_global(scope, global);
 }
+fn init_web_url<'a>(scope: &'a js::gc::scope::Scope<'a>, global: js::Object<'a>) {
+    web_url::add_to_global(scope, global);
+}
+fn init_web_fetch<'a>(scope: &'a js::gc::scope::Scope<'a>, global: js::Object<'a>) {
+    web_fetch::add_to_global(scope, global);
+}
+
+/// Named wrapper for the cpp_builtins install function, so it can appear in a
+/// `&[GlobalInitFn]` slice (closures cannot be coerced to bare fn pointers in a
+/// static context). The explicit `'a` unifies all three lifetime parameters so
+/// that the fn item type matches `GlobalInitFn = for<'a> fn(&'a Scope<'a>, Object<'a>)`.
+fn install_cpp_builtins<'a>(scope: &'a js::gc::scope::Scope<'a>, global: js::Object<'a>) {
+    unsafe { cpp_builtins::install(scope.cx_mut().raw_cx(), global.handle()); }
+}
+
+/// All built-in global initializers bundled with this crate.
+///
+/// Pass these (and any extras) to [`run`] or [`RuntimeBuilder`] rather than
+/// calling the old `register_builtins()`.
+pub const BUILTIN_INITIALIZERS: &[runtime::GlobalInitFn] = &[
+    web_globals::add_to_global,
+    init_web_streams,
+    init_web_url,
+    init_web_fetch,
+    install_cpp_builtins,
+];
 
 /// Apply CLI options that take effect before the runtime is initialized.
 ///
@@ -34,13 +55,17 @@ fn apply_pre_init_config(config: &config::RuntimeConfig) -> Result<(), String> {
 
 /// Run a JavaScript script or module on native targets.
 ///
-/// Registers all builtin globals and then delegates to [`core_runtime::run()`]
-/// with a tokio-based event loop driver.
+/// Combines [`BUILTIN_INITIALIZERS`] with any caller-supplied extras and
+/// then delegates to [`core_runtime::run()`] with a tokio-based event loop driver.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn run(config: config::RuntimeConfig) -> Result<(), String> {
+pub fn run(
+    config: config::RuntimeConfig,
+    extra_initializers: &[runtime::GlobalInitFn],
+) -> Result<(), String> {
     apply_pre_init_config(&config)?;
-    register_builtins();
-    core_runtime::run(config, drive_event_loop_native)
+    let mut initializers = BUILTIN_INITIALIZERS.to_vec();
+    initializers.extend_from_slice(extra_initializers);
+    core_runtime::run(config, &initializers, drive_event_loop_native)
 }
 
 /// Run a JavaScript script or module on wasm32 targets.
@@ -51,11 +76,15 @@ pub fn run(config: config::RuntimeConfig) -> Result<(), String> {
 /// async-lifted task. The cdylib in the `starling` package provides such a
 /// task via `wasip3::cli::command::export!`.
 #[cfg(target_arch = "wasm32")]
-pub async fn run(config: config::RuntimeConfig) -> Result<(), String> {
+pub async fn run(
+    config: config::RuntimeConfig,
+    extra_initializers: &[runtime::GlobalInitFn],
+) -> Result<(), String> {
     apply_pre_init_config(&config)?;
-    register_builtins();
+    let mut initializers = BUILTIN_INITIALIZERS.to_vec();
+    initializers.extend_from_slice(extra_initializers);
 
-    let (runtime, mut invocation) = match core_runtime::setup(config)? {
+    let (runtime, mut invocation) = match core_runtime::setup(config, &initializers)? {
         Some(pair) => pair,
         None => return Ok(()),
     };

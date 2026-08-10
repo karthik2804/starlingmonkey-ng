@@ -12,7 +12,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use core_runtime::config::RuntimeConfig;
-use core_runtime::runtime::Runtime;
+use core_runtime::runtime::RuntimeBuilder;
 use core_runtime::test_util::eval_with_setup;
 use core_runtime::{jsclass, jsmethods};
 
@@ -141,16 +141,14 @@ impl Constructible {
     }
 }
 
-fn setup() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        RustOnly::add_to_global(scope, global);
-        RenamedCtor::add_to_global(scope, global);
-        ManyFactories::add_to_global(scope, global);
-        CtorPlusFactory::add_to_global(scope, global);
-        RustOnlySetup::add_to_global(scope, global);
-        NoCtorAtAll::add_to_global(scope, global);
-        Constructible::add_to_global(scope, global);
-    });
+fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+    RustOnly::add_to_global(scope, global);
+    RenamedCtor::add_to_global(scope, global);
+    ManyFactories::add_to_global(scope, global);
+    CtorPlusFactory::add_to_global(scope, global);
+    RustOnlySetup::add_to_global(scope, global);
+    NoCtorAtAll::add_to_global(scope, global);
+    Constructible::add_to_global(scope, global);
 }
 
 /// `new Foo()` must throw a `TypeError` when no `#[constructor]` is present.
@@ -164,7 +162,7 @@ fn js_construction_throws() {
         "NoCtorAtAll",
     ] {
         let result = eval_with_setup(
-            setup,
+            &[setup_globals],
             &format!(
                 "try {{ new {class}(); 'no-throw' }} \
                  catch (e) {{ (e instanceof TypeError) + ':' + e.message }}"
@@ -177,22 +175,23 @@ fn js_construction_throws() {
 /// The interface object is still installed and usable (statics, prototype).
 #[test]
 fn interface_object_still_installed() {
-    let result = eval_with_setup(setup, "NoCtorAtAll.answer()");
+    let result = eval_with_setup(&[setup_globals], "NoCtorAtAll.answer()");
     assert_eq!(result, "42");
 }
 
 /// A class that does declare a `#[constructor]` stays constructible from JS.
 #[test]
 fn explicit_constructor_still_works() {
-    let result = eval_with_setup(setup, "new Constructible(5).n");
+    let result = eval_with_setup(&[setup_globals], "new Constructible(5).n");
     assert_eq!(result, "5");
 }
 
 /// `Foo::new(scope)` still works from Rust for the old-style shape.
 #[test]
 fn rust_side_new_works() {
-    setup();
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(setup_globals)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
     let obj = RustOnly::new(&scope).unwrap();
     assert_eq!(obj.data().n, 7);
@@ -203,8 +202,9 @@ fn rust_side_new_works() {
 /// `Foo::from_parts(scope, …)`, and no `Foo::new` is conjured up.
 #[test]
 fn rust_side_renamed_ctor_works() {
-    setup();
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(setup_globals)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
     let obj = RenamedCtor::from_parts(&scope, 3).unwrap();
     assert_eq!(obj.data().n, 3);
@@ -213,8 +213,9 @@ fn rust_side_renamed_ctor_works() {
 /// Every constructor-shaped fn gets a factory under its own name.
 #[test]
 fn rust_side_multiple_factories() {
-    setup();
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(setup_globals)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
     assert_eq!(ManyFactories::new(&scope).unwrap().data().n, 0);
     assert_eq!(ManyFactories::from_n(&scope, 6).unwrap().data().n, 6);
@@ -226,13 +227,14 @@ fn rust_side_multiple_factories() {
 #[test]
 fn rust_side_factory_alongside_js_constructor() {
     let js = eval_with_setup(
-        setup,
+        &[setup_globals],
         "new CtorPlusFactory(5).n + ':' + typeof CtorPlusFactory.doubled",
     );
     assert_eq!(js, "5:undefined");
 
-    setup();
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(setup_globals)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
     assert_eq!(CtorPlusFactory::new(&scope, 5).unwrap().data().n, 5);
     assert_eq!(CtorPlusFactory::doubled(&scope, 5).unwrap().data().n, 10);
@@ -241,8 +243,9 @@ fn rust_side_factory_alongside_js_constructor() {
 /// `Foo::new(scope, args)` still works from Rust for the setup-style shape.
 #[test]
 fn rust_side_setup_new_works() {
-    setup();
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(setup_globals)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
     let obj = RustOnlySetup::new(&scope, 11).unwrap();
     assert_eq!(obj.data().n, 11);

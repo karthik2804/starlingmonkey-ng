@@ -33,15 +33,12 @@ mod js_proto_tests {
         }
     }
 
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        CustomError::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    CustomError::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        eval_with_setup(&[setup_globals], code)
     }
 
     #[test]
@@ -120,15 +117,12 @@ mod constant_tests {
         }
     }
 
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        StatusCode::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    StatusCode::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        eval_with_setup(&[setup_globals], code)
     }
 
     #[test]
@@ -194,15 +188,12 @@ mod webidl_interface_tests {
         }
     }
 
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        MediaError::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    MediaError::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        eval_with_setup(&[setup_globals], code)
     }
 
     // --- Auto Symbol.toStringTag ---
@@ -310,15 +301,12 @@ mod jsnamespace_tests {
         }
     }
 
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        math_ns::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    math_ns::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        eval_with_setup(&[setup_globals], code)
     }
 
     #[test]
@@ -386,15 +374,12 @@ mod webidl_namespace_tests {
         }
     }
 
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        css_ns::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    css_ns::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        eval_with_setup(&[setup_globals], code)
     }
 
     #[test]
@@ -484,16 +469,13 @@ mod setup_style_inheritance {
         }
     }
 
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        Pet::add_to_global(scope, global);
+        Lily::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    Pet::add_to_global(scope, global);
-                    Lily::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        eval_with_setup(&[setup_globals], code)
     }
 
     #[test]
@@ -632,19 +614,17 @@ mod webidl_dictionary_tests {
         }
     }
 
-    fn setup() {
-        core_runtime::runtime::register_global_initializer(|scope, global| {
-            Greeter::add_to_global(scope, global);
-            Config::add_to_global(scope, global);
-        });
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        Greeter::add_to_global(scope, global);
+        Config::add_to_global(scope, global);
     }
 
     fn eval(code: &str) -> String {
-        eval_with_setup(setup, code)
+        eval_with_setup(&[setup_globals], code)
     }
 
     fn throws(code: &str) -> bool {
-        throws_with_setup(setup, code)
+        throws_with_setup(&[setup_globals], code)
     }
 
     // Required members
@@ -738,7 +718,7 @@ mod implicit_factory_tests {
     use core_runtime::config::RuntimeConfig;
     use core_runtime::jsclass;
     use core_runtime::jsmethods;
-    use core_runtime::runtime::Runtime;
+    use core_runtime::runtime::RuntimeBuilder;
     use js::error::{throw_type_error, ExnThrown};
     use js::gc::scope::Scope;
 
@@ -765,10 +745,9 @@ mod implicit_factory_tests {
 
     #[test]
     fn fallible_factory_ok_and_err() {
-        core_runtime::runtime::register_global_initializer(|scope, global| {
-            Checked::add_to_global(scope, global);
-        });
-        let rt = Runtime::init(&RuntimeConfig::default());
+        let rt = RuntimeBuilder::default()
+            .global_initializer(Checked::add_to_global)
+            .init(&RuntimeConfig::default());
         let scope = rt.default_global();
 
         let ok = Checked::checked(&scope, 7).expect("factory should succeed");

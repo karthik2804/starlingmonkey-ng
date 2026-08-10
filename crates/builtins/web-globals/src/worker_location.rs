@@ -175,26 +175,16 @@ pub fn add_to_global<'s>(scope: &'s Scope<'_>, global: Object<'s>) {
 // Nothing platform-specific in these tests, so skip them on wasm32.
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-    use core_runtime::{runtime, test_util::eval_with_setup};
+    use core_runtime::test_util::eval_with_setup;
 
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                super::clear_init_location();
-                runtime::register_global_initializer(super::add_to_global);
-            },
-            code,
-        )
+        super::clear_init_location();
+        eval_with_setup(&[super::add_to_global], code)
     }
 
     fn eval_with_url(location_url: &str, code: &str) -> String {
-        eval_with_setup(
-            || {
-                super::set_init_location(url::Url::parse(location_url).unwrap());
-                runtime::register_global_initializer(super::add_to_global);
-            },
-            code,
-        )
+        super::set_init_location(url::Url::parse(location_url).unwrap());
+        eval_with_setup(&[super::add_to_global], code)
     }
 
     #[test]

@@ -16,7 +16,7 @@
 
 use core_runtime::config::RuntimeConfig;
 use core_runtime::module::evaluate_module;
-use core_runtime::runtime::Runtime;
+use core_runtime::runtime::RuntimeBuilder;
 use core_runtime::test_util::eval_with_setup;
 use core_runtime::{jsglobals, jsmodule, jsnamespace, webidl_namespace};
 use js::conversion::FromJSVal;
@@ -59,20 +59,18 @@ mod const_webidl_ns {
     }
 }
 
-fn setup() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        const_globals::add_to_global(scope, global);
-        const_ns::add_to_global(scope, global);
-        const_webidl_ns::add_to_global(scope, global);
-        // SAFETY: called during global initialization, before any JS runs.
-        unsafe {
-            const_module::register(scope);
-        }
-    });
+fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+    const_globals::add_to_global(scope, global);
+    const_ns::add_to_global(scope, global);
+    const_webidl_ns::add_to_global(scope, global);
+    // SAFETY: called during global initialization, before any JS runs.
+    unsafe {
+        const_module::register(scope);
+    }
 }
 
 fn eval(code: &str) -> String {
-    eval_with_setup(setup, code)
+    eval_with_setup(&[setup_globals], code)
 }
 
 /// Evaluate a module that imports from `const_module` (specifier `constModule`)
@@ -83,8 +81,9 @@ fn eval(code: &str) -> String {
 /// import through `evaluate_module` the way `starling/examples/native_module.rs`
 /// does.
 fn eval_module(body: &str) -> String {
-    setup();
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(setup_globals)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
     let source = format!("import * as m from \"constModule\";\nglobalThis._result = {body};");
     // SAFETY: `scope` outlives the evaluation, and the module registry was
@@ -197,21 +196,20 @@ mod multi_word_ns {
     pub const ANSWER: i32 = 5;
 }
 
-fn setup_derived_names() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        multi_word_ns::add_to_global(scope, global);
-        // SAFETY: called during global initialization, before any JS runs.
-        unsafe {
-            multi_word_module::register(scope);
-            ignored_module_name::register(scope);
-        }
-    });
+fn setup_derived_names_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+    multi_word_ns::add_to_global(scope, global);
+    // SAFETY: called during global initialization, before any JS runs.
+    unsafe {
+        multi_word_module::register(scope);
+        ignored_module_name::register(scope);
+    }
 }
 
 /// Import from `specifier` and read `ANSWER` back as a string.
 fn eval_import(specifier: &str) -> String {
-    setup_derived_names();
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(setup_derived_names_globals)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
     let source = format!("import {{ ANSWER }} from \"{specifier}\";\nglobalThis._result = ANSWER;");
     // SAFETY: `scope` outlives the evaluation, and the module registry was
@@ -234,9 +232,8 @@ fn explicit_module_name_is_used_verbatim() {
 
 #[test]
 fn namespace_global_name_is_camel_cased() {
-    setup_derived_names();
     assert_eq!(
-        eval_with_setup(setup_derived_names, "multiWordNs.ANSWER"),
+        eval_with_setup(&[setup_derived_names_globals], "multiWordNs.ANSWER"),
         "5"
     );
 }

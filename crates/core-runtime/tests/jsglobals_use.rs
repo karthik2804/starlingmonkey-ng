@@ -49,16 +49,14 @@ mod grouped_globals {
     pub use super::{Alpha, Beta};
 }
 
-fn setup() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        grouped_globals::add_to_global(scope, global);
-    });
+fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+    grouped_globals::add_to_global(scope, global);
 }
 
 #[test]
 fn grouped_use_registers_all_classes() {
-    assert_eq!(eval_with_setup(setup, "typeof Alpha"), "function");
-    assert_eq!(eval_with_setup(setup, "typeof Beta"), "function");
-    assert_eq!(eval_with_setup(setup, "new Alpha().tag"), "alpha");
-    assert_eq!(eval_with_setup(setup, "new Beta().tag"), "beta");
+    assert_eq!(eval_with_setup(&[setup_globals], "typeof Alpha"), "function");
+    assert_eq!(eval_with_setup(&[setup_globals], "typeof Beta"), "function");
+    assert_eq!(eval_with_setup(&[setup_globals], "new Alpha().tag"), "alpha");
+    assert_eq!(eval_with_setup(&[setup_globals], "new Beta().tag"), "beta");
 }

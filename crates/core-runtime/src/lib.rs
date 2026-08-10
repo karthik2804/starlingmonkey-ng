@@ -14,7 +14,7 @@ pub use js::macros::{
 };
 use js::{error::ExnThrown, exception};
 
-use crate::runtime::Runtime;
+use crate::runtime::{GlobalInitFn, Runtime, RuntimeBuilder};
 
 /// Run a JavaScript script or module based on the provided configuration.
 ///
@@ -43,12 +43,13 @@ use crate::runtime::Runtime;
 /// On WASIp3, it spawns the event loop via `wit_bindgen::spawn`.
 pub fn run(
     config: config::RuntimeConfig,
+    initializers: &[GlobalInitFn],
     drive_event_loop: impl FnOnce(
         std::rc::Rc<Runtime>,
         invocation::InvocationState,
     ) -> Result<(), String>,
 ) -> Result<(), String> {
-    match setup(config)? {
+    match setup(config, initializers)? {
         Some((runtime, invocation)) => drive_event_loop(runtime, invocation),
         None => Ok(()),
     }
@@ -63,8 +64,11 @@ pub fn run(
 /// Shared by [`setup`] and [`setup_for_serve`].
 fn init_and_eval(
     config: config::RuntimeConfig,
+    initializers: &[GlobalInitFn],
 ) -> Result<(std::rc::Rc<Runtime>, invocation::InvocationState), String> {
-    let runtime = Runtime::init(&config);
+    let runtime = RuntimeBuilder::default()
+        .with_initializers(initializers)
+        .init(&config);
 
     let (source, filename) = if let Some(ref eval) = config.eval_script {
         (eval.clone(), "<eval>".to_string())
@@ -138,8 +142,9 @@ fn init_and_eval(
 /// future on its own stack instead of bridging through a sync callback.
 pub fn setup(
     config: config::RuntimeConfig,
+    initializers: &[GlobalInitFn],
 ) -> Result<Option<(std::rc::Rc<Runtime>, invocation::InvocationState)>, String> {
-    let (runtime, invocation) = init_and_eval(config)?;
+    let (runtime, invocation) = init_and_eval(config, initializers)?;
     if !invocation.event_loop().is_alive() {
         return Ok(None);
     }
@@ -153,8 +158,9 @@ pub fn setup(
 /// serving, then keep the runtime alive for the accept loop.
 pub fn setup_for_serve(
     config: config::RuntimeConfig,
+    initializers: &[GlobalInitFn],
 ) -> Result<(std::rc::Rc<Runtime>, invocation::InvocationState), String> {
-    init_and_eval(config)
+    init_and_eval(config, initializers)
 }
 
 /// Extract and print the pending JS exception, if any.
@@ -217,7 +223,7 @@ mod tests {
     fn run_eval_module_mode() {
         let config = config_from(&["starling", "-e", "globalThis._x = 1 + 2;"]);
         assert!(config.module_mode());
-        run(config, noop_driver)
+        run(config, &[], noop_driver)
             .map_err(|e| println!("{e}"))
             .expect("Run failed");
     }
@@ -226,7 +232,7 @@ mod tests {
     fn run_eval_legacy_script() {
         let config = config_from(&["starling", "-e", "var x = 42;", "--legacy-script"]);
         assert!(!config.module_mode());
-        run(config, noop_driver)
+        run(config, &[], noop_driver)
             .map_err(|e| println!("{e}"))
             .expect("Run failed");
     }
@@ -238,7 +244,7 @@ mod tests {
         std::fs::write(&script, "const x = 1 + 2;\n").unwrap();
 
         let config = config_from(&["starling", &script.to_string_lossy()]);
-        run(config, noop_driver)
+        run(config, &[], noop_driver)
             .map_err(|e| println!("{e}"))
             .expect("Run failed");
     }
@@ -250,7 +256,7 @@ mod tests {
         std::fs::write(&script, "var x = 1 + 2;\n").unwrap();
 
         let config = config_from(&["starling", &script.to_string_lossy(), "--legacy-script"]);
-        run(config, noop_driver)
+        run(config, &[], noop_driver)
             .map_err(|e| println!("{e}"))
             .expect("Run failed");
     }
@@ -267,7 +273,7 @@ mod tests {
         .unwrap();
 
         let config = config_from(&["starling", &entry.to_string_lossy()]);
-        run(config, noop_driver)
+        run(config, &[], noop_driver)
             .map_err(|e| println!("{e}"))
             .expect("Run failed");
     }
@@ -286,7 +292,7 @@ mod tests {
             "-i",
             &init.to_string_lossy(),
         ]);
-        run(config, noop_driver)
+        run(config, &[], noop_driver)
             .map_err(|e| println!("{e}"))
             .expect("Run failed");
     }

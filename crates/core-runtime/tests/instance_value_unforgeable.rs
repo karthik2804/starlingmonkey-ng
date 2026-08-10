@@ -38,30 +38,28 @@ impl Widget {
     }
 }
 
-fn setup() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        Widget::add_to_global(scope, global);
-    });
+fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+    Widget::add_to_global(scope, global);
 }
 
 #[test]
 fn dup_instance_has_unforgeable_own_accessor() {
     assert_eq!(
         eval_with_setup(
-            setup,
+            &[setup_globals],
             "const d = new Widget().dup(); \
              typeof Object.getOwnPropertyDescriptor(d, 'kind') === 'object'"
         ),
         "true"
     );
-    assert_eq!(eval_with_setup(setup, "new Widget().dup().kind"), "42");
+    assert_eq!(eval_with_setup(&[setup_globals], "new Widget().dup().kind"), "42");
 }
 
 #[test]
 fn unforgeable_accessor_is_not_on_prototype() {
     assert_eq!(
         eval_with_setup(
-            setup,
+            &[setup_globals],
             "Object.getOwnPropertyDescriptor(Widget.prototype, 'kind') === undefined"
         ),
         "true"

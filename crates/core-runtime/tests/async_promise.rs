@@ -11,7 +11,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use core_runtime::event_loop::{run_to_completion, with_event_loop, EventLoop};
-use core_runtime::runtime::{clear_global_initializers, register_global_initializer, Runtime};
+use core_runtime::runtime::RuntimeBuilder;
 use js::conversion::FromJSVal;
 use js::gc::scope::Scope;
 use js::promise::PromiseFuture;
@@ -60,9 +60,9 @@ fn block_on_event_loop(scope: &Scope<'_>, el: &mut EventLoop) {
 
 #[test]
 fn async_promise_resolves_and_rejects_via_event_loop() {
-    clear_global_initializers();
-    register_global_initializer(AsyncTest::add_to_global);
-    let rt = Runtime::init(&core_runtime::config::RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(AsyncTest::add_to_global)
+        .init(&core_runtime::config::RuntimeConfig::default());
     let scope = rt.default_global();
     let mut el = EventLoop::new();
 
@@ -106,9 +106,9 @@ fn zero_delay_interval_does_not_starve_async_futures() {
     // one-batch-per-step stepping, the perpetually-ready interval keeps the loop
     // from ever reaching its await branch — the future is never polled, the
     // promise never settles, and this test livelocks.
-    clear_global_initializers();
-    register_global_initializer(AsyncTest::add_to_global);
-    let rt = Runtime::init(&core_runtime::config::RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(AsyncTest::add_to_global)
+        .init(&core_runtime::config::RuntimeConfig::default());
     let scope = rt.default_global();
     let mut el = EventLoop::new();
 
@@ -146,9 +146,9 @@ fn long_handler_timer_chain_does_not_starve_async_futures() {
     // ready task, the loop never goes idle, and only the Progressed-path future
     // poll keeps the Rust-future-backed promise alive. The iteration cap turns
     // a starved future into an assertion failure instead of a livelock.
-    clear_global_initializers();
-    register_global_initializer(AsyncTest::add_to_global);
-    let rt = Runtime::init(&core_runtime::config::RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(AsyncTest::add_to_global)
+        .init(&core_runtime::config::RuntimeConfig::default());
     let scope = rt.default_global();
     let mut el = EventLoop::new();
 

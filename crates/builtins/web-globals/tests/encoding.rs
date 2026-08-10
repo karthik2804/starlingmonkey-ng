@@ -7,18 +7,12 @@
 
 use core_runtime::test_util::{eval_with_setup, throws_with_setup};
 
-fn setup() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        web_globals::add_to_global(scope, global);
-    });
-}
-
 fn eval(code: &str) -> String {
-    eval_with_setup(setup, code)
+    eval_with_setup(&[web_globals::add_to_global], code)
 }
 
 fn throws(code: &str) -> bool {
-    throws_with_setup(setup, code)
+    throws_with_setup(&[web_globals::add_to_global], code)
 }
 
 // ── TextEncoder existence ──

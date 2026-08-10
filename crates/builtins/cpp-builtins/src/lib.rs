@@ -17,12 +17,12 @@ pub unsafe fn install(cx: *mut JSContext, global: HandleObject) -> bool {
 #[cfg(test)]
 mod tests {
     mod console_integration {
-        use core_runtime::test_util::throws_with_setup;
+        use core_runtime::runtime::RuntimeBuilder;
 
         fn eval(code: &str) -> bool {
-            libstarling::register_builtins();
-            let rt =
-                libstarling::runtime::Runtime::init(&libstarling::config::RuntimeConfig::default());
+            let rt = RuntimeBuilder::default()
+                .with_initializers(libstarling::BUILTIN_INITIALIZERS)
+                .init(&libstarling::config::RuntimeConfig::default());
             let scope = rt.default_global();
             let rval = js::compile::evaluate_with_filename(&scope, code, "test.js", 1)
                 .expect("eval failed");
@@ -30,7 +30,7 @@ mod tests {
         }
 
         fn eval_throws(code: &str) -> bool {
-            throws_with_setup(libstarling::register_builtins, code)
+            core_runtime::test_util::throws_with_setup(libstarling::BUILTIN_INITIALIZERS, code)
         }
 
         #[test]

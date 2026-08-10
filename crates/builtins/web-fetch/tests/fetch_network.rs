@@ -11,7 +11,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use core_runtime::event_loop::{run_to_completion, with_event_loop, EventLoop};
-use core_runtime::runtime::{clear_global_initializers, Runtime};
+use core_runtime::runtime::RuntimeBuilder;
 use js::conversion::FromJSVal;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -243,9 +243,9 @@ fn start_same_origin_redirect_auth_server() -> String {
 /// Evaluate `code` (which sets `globalThis.__out`), drive the event loop to
 /// completion, and return `__out`.
 fn run_and_get_out(code: &str) -> String {
-    clear_global_initializers();
-    libstarling::register_builtins();
-    let rt = Runtime::init(&core_runtime::config::RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .with_initializers(libstarling::BUILTIN_INITIALIZERS)
+        .init(&core_runtime::config::RuntimeConfig::default());
     let scope = rt.default_global();
     let rawcx = unsafe { scope.cx_mut().raw_cx() };
     let el = EventLoop::new();
@@ -783,9 +783,9 @@ fn a_reused_abort_signal_does_not_accumulate_fetch_abort_algorithms() {
     // Inlined rather than run through `run_and_get_out` because the signal has to be inspected
     // while its runtime is still alive.
     let url = start_repeating_server(3, "body");
-    clear_global_initializers();
-    libstarling::register_builtins();
-    let rt = Runtime::init(&core_runtime::config::RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .with_initializers(libstarling::BUILTIN_INITIALIZERS)
+        .init(&core_runtime::config::RuntimeConfig::default());
     let scope = rt.default_global();
     let rawcx = unsafe { scope.cx_mut().raw_cx() };
     let el = EventLoop::new();

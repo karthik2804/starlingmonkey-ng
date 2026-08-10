@@ -56,26 +56,16 @@ mod sequence_tests {
         }
     }
 
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        SeqAcceptor::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    SeqAcceptor::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        eval_with_setup(&[setup_globals], code)
     }
 
     fn throws(code: &str) -> bool {
-        throws_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    SeqAcceptor::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        throws_with_setup(&[setup_globals], code)
     }
 
     #[test]
@@ -185,26 +175,16 @@ mod record_tests {
         }
     }
 
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        RecordAcceptor::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    RecordAcceptor::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        eval_with_setup(&[setup_globals], code)
     }
 
     fn throws(code: &str) -> bool {
-        throws_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    RecordAcceptor::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        throws_with_setup(&[setup_globals], code)
     }
 
     #[test]
@@ -395,15 +375,12 @@ mod union_tests {
         }
     }
 
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        UnionAcceptor::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    UnionAcceptor::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        eval_with_setup(&[setup_globals], code)
     }
 
     #[test]
@@ -550,26 +527,16 @@ mod union_lifetime_tests {
         }
     }
 
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        LifetimeUnionAcceptor::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    LifetimeUnionAcceptor::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        eval_with_setup(&[setup_globals], code)
     }
 
     fn throws(code: &str) -> bool {
-        throws_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    LifetimeUnionAcceptor::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        throws_with_setup(&[setup_globals], code)
     }
 
     #[test]
@@ -711,26 +678,16 @@ mod union_sequence_record_tests {
         }
     }
 
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        SeqRecordAcceptor::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    SeqRecordAcceptor::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        eval_with_setup(&[setup_globals], code)
     }
 
     fn throws(code: &str) -> bool {
-        throws_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    SeqRecordAcceptor::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        throws_with_setup(&[setup_globals], code)
     }
 
     #[test]
@@ -826,26 +783,16 @@ mod async_sequence_tests {
         }
     }
 
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        AsyncAcceptor::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    AsyncAcceptor::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        eval_with_setup(&[setup_globals], code)
     }
 
     fn throws(code: &str) -> bool {
-        throws_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(|scope, global| {
-                    AsyncAcceptor::add_to_global(scope, global);
-                });
-            },
-            code,
-        )
+        throws_with_setup(&[setup_globals], code)
     }
 
     #[test]

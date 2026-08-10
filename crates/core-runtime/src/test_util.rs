@@ -4,7 +4,10 @@
 
 use js::{conversion::FromJSVal, error::ExnThrown};
 
-use crate::{config::RuntimeConfig, runtime::Runtime};
+use crate::{
+    config::RuntimeConfig,
+    runtime::{GlobalInitFn, RuntimeBuilder},
+};
 
 /// Create a temp directory that works on both native and wasm targets.
 ///
@@ -25,10 +28,12 @@ pub fn test_tempdir() -> tempfile::TempDir {
     }
 }
 
-/// Run setup, create a runtime, evaluate JS code, and convert the result to a string.
-pub fn eval_with_setup(setup: impl FnOnce(), code: &str) -> String {
-    setup();
-    let rt = Runtime::init(&RuntimeConfig::default());
+/// Create a runtime with the given global initializers, evaluate JS code,
+/// and convert the result to a string.
+pub fn eval_with_setup(initializers: &[GlobalInitFn], code: &str) -> String {
+    let rt = RuntimeBuilder::default()
+        .with_initializers(initializers)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
     match js::compile::evaluate_with_filename(&scope, code, "test.js", 1) {
         Ok(val) => String::from_jsval(&scope, val, ()).unwrap(),
@@ -39,10 +44,11 @@ pub fn eval_with_setup(setup: impl FnOnce(), code: &str) -> String {
     }
 }
 
-/// Run setup, create a runtime, and check whether JS code throws.
-pub fn throws_with_setup(setup: impl FnOnce(), code: &str) -> bool {
-    setup();
-    let rt = Runtime::init(&RuntimeConfig::default());
+/// Create a runtime with the given global initializers and check whether JS code throws.
+pub fn throws_with_setup(initializers: &[GlobalInitFn], code: &str) -> bool {
+    let rt = RuntimeBuilder::default()
+        .with_initializers(initializers)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
     js::compile::evaluate_with_filename(&scope, code, "test.js", 1).is_err()
 }

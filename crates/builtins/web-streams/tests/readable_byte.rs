@@ -19,15 +19,15 @@
 
 use core_runtime::config::RuntimeConfig;
 use core_runtime::event_loop::run_microtasks;
-use core_runtime::runtime::{clear_global_initializers, register_global_initializer, Runtime};
+use core_runtime::runtime::RuntimeBuilder;
 use js::conversion::FromJSVal;
 use js::error::ExnThrown;
 
 /// Evaluate `code`, drain microtasks, and return `String(globalThis.__out)`.
 fn run(code: &str) -> String {
-    clear_global_initializers();
-    register_global_initializer(web_streams::add_to_global);
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(web_streams::add_to_global)
+        .init(&RuntimeConfig::default());
     let scope = rt.default_global();
     if js::compile::evaluate_with_filename(&scope, code, "test.js", 1).is_err() {
         panic!("evaluation threw: {:?}", ExnThrown::capture(&scope));

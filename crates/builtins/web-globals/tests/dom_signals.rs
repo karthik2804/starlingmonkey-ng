@@ -20,36 +20,34 @@ use core_runtime::test_util::eval_with_setup;
 use js::conversion::FromJSVal;
 use web_globals::signals::AbortSignal;
 
-fn setup() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        web_globals::add_to_global(scope, global);
-        // Test-only hook: `__addAbortAlgorithm(signal, fn)` registers `fn` as a
-        // native abort algorithm — the internal API builtins like fetch use —
-        // so tests can exercise algorithm semantics that have no public JS
-        // surface (notably: a throwing algorithm must not short-circuit the
-        // remaining algorithms, the `abort` event, or dependent signals).
-        let helper = js::Function::new_callback(
-            scope,
-            c"__addAbortAlgorithm",
-            2,
-            |scope, args, _| {
-                let signal = AbortSignal::from_jsval_throwing(scope, args.get(0), ())?;
-                let callback = js::Function::from_jsval_throwing(scope, args.get(1), ())?;
-                web_globals::signals::algorithms::add_abort_algorithm(&signal, &callback);
-                Ok(js::value::undefined())
-            },
-            (),
-        )
-        .expect("create __addAbortAlgorithm");
-        let helper_val = scope.root_value(helper.as_value());
-        global
-            .set_property(scope, c"__addAbortAlgorithm", helper_val)
-            .expect("install __addAbortAlgorithm");
-    });
+fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+    web_globals::add_to_global(scope, global);
+    // Test-only hook: `__addAbortAlgorithm(signal, fn)` registers `fn` as a
+    // native abort algorithm — the internal API builtins like fetch use —
+    // so tests can exercise algorithm semantics that have no public JS
+    // surface (notably: a throwing algorithm must not short-circuit the
+    // remaining algorithms, the `abort` event, or dependent signals).
+    let helper = js::Function::new_callback(
+        scope,
+        c"__addAbortAlgorithm",
+        2,
+        |scope, args, _| {
+            let signal = AbortSignal::from_jsval_throwing(scope, args.get(0), ())?;
+            let callback = js::Function::from_jsval_throwing(scope, args.get(1), ())?;
+            web_globals::signals::algorithms::add_abort_algorithm(&signal, &callback);
+            Ok(js::value::undefined())
+        },
+        (),
+    )
+    .expect("create __addAbortAlgorithm");
+    let helper_val = scope.root_value(helper.as_value());
+    global
+        .set_property(scope, c"__addAbortAlgorithm", helper_val)
+        .expect("install __addAbortAlgorithm");
 }
 
 fn eval(code: &str) -> String {
-    eval_with_setup(setup, code)
+    eval_with_setup(&[setup_globals], code)
 }
 
 // ── Brands / interface shape ──

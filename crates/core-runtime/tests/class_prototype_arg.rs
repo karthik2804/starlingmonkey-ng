@@ -35,16 +35,14 @@ impl Holder {
     }
 }
 
-fn setup() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        Holder::add_to_global(scope, global);
-    });
+fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+    Holder::add_to_global(scope, global);
 }
 
 #[test]
 fn accepts_real_instance() {
     assert_eq!(
-        eval_with_setup(setup, "new Holder().otherValue(new Holder())"),
+        eval_with_setup(&[setup_globals], "new Holder().otherValue(new Holder())"),
         "7"
     );
 }
@@ -52,12 +50,12 @@ fn accepts_real_instance() {
 #[test]
 fn rejects_prototype_argument() {
     assert!(throws_with_setup(
-        setup,
+        &[setup_globals],
         "new Holder().otherValue(Holder.prototype)"
     ));
 }
 
 #[test]
 fn rejects_plain_object_argument() {
-    assert!(throws_with_setup(setup, "new Holder().otherValue({})"));
+    assert!(throws_with_setup(&[setup_globals], "new Holder().otherValue({})"));
 }

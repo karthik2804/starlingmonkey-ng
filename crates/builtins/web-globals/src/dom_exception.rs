@@ -234,17 +234,12 @@ impl ThrowException for DOMExceptionError {
 mod dom_exception_integration {
     use core_runtime::{
         config::RuntimeConfig,
-        runtime::{self, Runtime},
+        runtime::RuntimeBuilder,
         test_util::eval_with_setup,
     };
 
     fn eval(code: &str) -> String {
-        eval_with_setup(
-            || {
-                runtime::register_global_initializer(super::DOMException::add_to_global);
-            },
-            code,
-        )
+        eval_with_setup(&[super::DOMException::add_to_global], code)
     }
 
     #[test]
@@ -256,8 +251,9 @@ mod dom_exception_integration {
 
     #[test]
     fn rust_new() {
-        runtime::register_global_initializer(super::DOMException::add_to_global);
-        let rt = Runtime::init(&RuntimeConfig::default());
+        let rt = RuntimeBuilder::default()
+            .global_initializer(super::DOMException::add_to_global)
+            .init(&RuntimeConfig::default());
         let scope = rt.default_global();
         let e = super::DOMException::new(&scope, None, None).unwrap();
         assert_eq!(e.name(), "Error");
@@ -415,16 +411,16 @@ mod throw_exception_integration {
         }
     }
 
+    fn init_test_error_globals<'a>(scope: &'a js::gc::scope::Scope<'a>, global: js::Object<'a>) {
+        test_error_globals::add_to_global(scope, global);
+    }
+
     fn eval(code: &str) -> String {
         eval_with_setup(
-            || {
-                core_runtime::runtime::register_global_initializer(
-                    crate::dom_exception::DOMException::add_to_global,
-                );
-                core_runtime::runtime::register_global_initializer(
-                    test_error_globals::add_to_global,
-                );
-            },
+            &[
+                crate::dom_exception::DOMException::add_to_global,
+                init_test_error_globals,
+            ],
             code,
         )
     }

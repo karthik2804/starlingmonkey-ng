@@ -85,18 +85,16 @@ impl Variadic {
     }
 }
 
-fn setup() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        Variadic::add_to_global(scope, global);
-    });
+fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+    Variadic::add_to_global(scope, global);
 }
 
 fn eval(code: &str) -> String {
-    eval_with_setup(setup, code)
+    eval_with_setup(&[setup_globals], code)
 }
 
 fn throws(code: &str) -> bool {
-    throws_with_setup(setup, code)
+    throws_with_setup(&[setup_globals], code)
 }
 
 // ============================================================================
@@ -332,14 +330,12 @@ mod handle_value_tests {
         }
     }
 
-    fn setup() {
-        core_runtime::runtime::register_global_initializer(|scope, global| {
-            ValueVariadic::add_to_global(scope, global);
-        });
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        ValueVariadic::add_to_global(scope, global);
     }
 
     fn eval(code: &str) -> String {
-        eval_with_setup(setup, code)
+        eval_with_setup(&[setup_globals], code)
     }
 
     #[test]
@@ -367,11 +363,12 @@ mod handle_value_tests {
     #[test]
     fn handles_survive_under_gc_zeal() {
         use core_runtime::config::RuntimeConfig;
-        use core_runtime::runtime::Runtime;
+        use core_runtime::runtime::RuntimeBuilder;
         use js::gc::SetGCZeal;
 
-        setup();
-        let rt = Runtime::init(&RuntimeConfig::default());
+        let rt = RuntimeBuilder::default()
+            .global_initializer(setup_globals)
+            .init(&RuntimeConfig::default());
         let scope = rt.default_global();
 
         // Mode 14 (Compact): every GC compacts, moving heap objects.
@@ -463,15 +460,13 @@ mod constructor_tests {
         }
     }
 
-    fn setup() {
-        core_runtime::runtime::register_global_initializer(|scope, global| {
-            Tally::add_to_global(scope, global);
-            Labelled::add_to_global(scope, global);
-        });
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        Tally::add_to_global(scope, global);
+        Labelled::add_to_global(scope, global);
     }
 
     fn eval(code: &str) -> String {
-        eval_with_setup(setup, code)
+        eval_with_setup(&[setup_globals], code)
     }
 
     #[test]
@@ -508,7 +503,7 @@ mod constructor_tests {
 mod free_fn_tests {
     use core_runtime::config::RuntimeConfig;
     use core_runtime::module::evaluate_module;
-    use core_runtime::runtime::Runtime;
+    use core_runtime::runtime::RuntimeBuilder;
     use core_runtime::test_util::eval_with_setup;
     use core_runtime::{jsglobals, jsmodule, jsnamespace, webidl_namespace};
     use js::class::RestArgs;
@@ -559,25 +554,24 @@ mod free_fn_tests {
         }
     }
 
-    fn setup() {
-        core_runtime::runtime::register_global_initializer(|scope, global| {
-            rest_globals::add_to_global(scope, global);
-            rest_ns::add_to_global(scope, global);
-            rest_webidl_ns::add_to_global(scope, global);
-            // SAFETY: called during global initialization, before any JS runs.
-            unsafe {
-                rest_module::register(scope);
-            }
-        });
+    fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+        rest_globals::add_to_global(scope, global);
+        rest_ns::add_to_global(scope, global);
+        rest_webidl_ns::add_to_global(scope, global);
+        // SAFETY: called during global initialization, before any JS runs.
+        unsafe {
+            rest_module::register(scope);
+        }
     }
 
     fn eval(code: &str) -> String {
-        eval_with_setup(setup, code)
+        eval_with_setup(&[setup_globals], code)
     }
 
     fn eval_module(body: &str) -> String {
-        setup();
-        let rt = Runtime::init(&RuntimeConfig::default());
+        let rt = RuntimeBuilder::default()
+            .global_initializer(setup_globals)
+            .init(&RuntimeConfig::default());
         let scope = rt.default_global();
         let source = format!("import * as m from \"restModule\";\nglobalThis._result = {body};");
         // SAFETY: `scope` outlives the evaluation, and the module registry was
@@ -668,7 +662,7 @@ mod free_fn_tests {
 mod promise_return_tests {
     use core_runtime::config::RuntimeConfig;
     use core_runtime::event_loop::run_microtasks;
-    use core_runtime::runtime::{clear_global_initializers, register_global_initializer, Runtime};
+    use core_runtime::runtime::RuntimeBuilder;
     use core_runtime::{jsclass, jsmethods};
     use js::conversion::FromJSVal;
     use js::error::ExnThrown;
@@ -710,11 +704,9 @@ mod promise_return_tests {
 
     /// Evaluate `code`, drain microtasks, and return `String(globalThis.__out)`.
     fn run(code: &str) -> String {
-        clear_global_initializers();
-        register_global_initializer(|scope, global| {
-            Waiter::add_to_global(scope, global);
-        });
-        let rt = Runtime::init(&RuntimeConfig::default());
+        let rt = RuntimeBuilder::default()
+            .global_initializer(Waiter::add_to_global)
+            .init(&RuntimeConfig::default());
         let scope = rt.default_global();
         if js::compile::evaluate_with_filename(&scope, code, "test.js", 1).is_err() {
             panic!("evaluation threw: {:?}", ExnThrown::capture(&scope));

@@ -30,21 +30,19 @@ impl Node {
     }
 }
 
-fn setup() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        Node::add_to_global(scope, global);
-    });
+fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+    Node::add_to_global(scope, global);
 }
 
 #[test]
 fn raw_identifier_getter_uses_keyword_name() {
-    assert_eq!(eval_with_setup(setup, "new Node().type"), "element");
+    assert_eq!(eval_with_setup(&[setup_globals], "new Node().type"), "element");
 }
 
 #[test]
 fn raw_identifier_method_uses_keyword_name() {
     assert_eq!(
-        eval_with_setup(setup, "String(new Node().match('element'))"),
+        eval_with_setup(&[setup_globals], "String(new Node().match('element'))"),
         "true"
     );
 }

@@ -44,10 +44,8 @@ impl Borrowed {
     }
 }
 
-fn setup() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        Borrowed::add_to_global(scope, global);
-    });
+fn setup_globals(scope: &js::gc::scope::Scope<'_>, global: js::Object<'_>) {
+    Borrowed::add_to_global(scope, global);
 }
 
 #[test]
@@ -55,7 +53,7 @@ fn distinct_objects_do_not_conflict() {
     // Each object has its own borrow flag, so borrowing two different objects at
     // once is fine: `a.n` becomes 1, plus `b.n` (0).
     let result = eval_with_setup(
-        setup,
+        &[setup_globals],
         "let a = new Borrowed(); let b = new Borrowed(); a.combine(b)",
     );
     assert_eq!(result, "1");
@@ -66,7 +64,7 @@ fn sequential_borrows_are_fine() {
     // Non-overlapping borrows (separate calls) never conflict; the second call
     // returns `a.n` after two increments.
     let result = eval_with_setup(
-        setup,
+        &[setup_globals],
         "let a = new Borrowed(); let b = new Borrowed(); a.combine(b); a.combine(b)",
     );
     assert_eq!(result, "2");

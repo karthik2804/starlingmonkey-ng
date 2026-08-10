@@ -14,7 +14,7 @@
 #![cfg(feature = "debugmozjs")]
 
 use core_runtime::config::RuntimeConfig;
-use core_runtime::runtime::Runtime;
+use core_runtime::runtime::RuntimeBuilder;
 use core_runtime::{jsclass, jsmethods};
 use js::gc::{self, GCOptions, GCReason, SetGCZeal};
 
@@ -38,10 +38,9 @@ impl Probe {
 
 #[test]
 fn displaced_global_registry_survives_compacting_gc() {
-    core_runtime::runtime::register_global_initializer(|scope, global| {
-        Probe::add_to_global(scope, global);
-    });
-    let rt = Runtime::init(&RuntimeConfig::default());
+    let rt = RuntimeBuilder::default()
+        .global_initializer(Probe::add_to_global)
+        .init(&RuntimeConfig::default());
 
     // Realm A: the initial default global.
     let scope_a = rt.default_global();
